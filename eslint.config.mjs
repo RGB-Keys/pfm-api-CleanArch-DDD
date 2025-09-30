@@ -4,7 +4,8 @@ import tseslint from 'typescript-eslint'
 
 export default tseslint.config(
 	js.configs.recommended,
-	tseslint.configs.recommended,
+	...tseslint.configs.recommended,
+
 	{
 		files: ['**/*.ts'],
 		ignores: [
@@ -14,24 +15,25 @@ export default tseslint.config(
 			'dist',
 			'node_modules',
 		],
-		plugins: { prettier },
+		plugins: {
+			prettier,
+		},
 		languageOptions: {
-			parserOptions: { project: ['./tsconfig.json'] },
+			parserOptions: {
+				project: ['./tsconfig.json'],
+			},
 		},
 		rules: {
 			'prettier/prettier': 'error',
-			'@typescript-eslint/no-unused-vars': [
-				'error',
-				{
-					args: 'all',
-					argsIgnorePattern: '^_',
-					caughtErrors: 'all',
-					caughtErrorsIgnorePattern: '^_',
-					destructuredArrayIgnorePattern: '^_',
-					varsIgnorePattern: '^_',
-					ignoreRestSiblings: true,
-				},
-			],
+			'@typescript-eslint/no-unused-vars': ['error', {
+				args: 'all',
+				argsIgnorePattern: '^_',
+				caughtErrors: 'all',
+				caughtErrorsIgnorePattern: '^_',
+				destructuredArrayIgnorePattern: '^_',
+				varsIgnorePattern: '^_',
+				ignoreRestSiblings: true,
+			}],
 		},
 	},
 )
