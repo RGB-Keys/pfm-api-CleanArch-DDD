@@ -4,36 +4,37 @@ import { ValidationError } from '@/api/core/errors/domain/validation-error.domai
 /**
  * Value Object que representa a renda mensal de um usuário.
  */
-export class Money extends ValueObject<number> {
+export class Money extends ValueObject<{ amountInCents: number }> {
 	constructor(amount: number | string) {
+		// Converte string com vírgula ou número para float
 		const parsedAmount =
 			typeof amount === 'string' ? parseFloat(amount.replace(',', '.')) : amount
 
-		if (isNaN(parsedAmount)) {
-			throw new ValidationError('Valor da renda mensal inválido.')
+		if (typeof parsedAmount !== 'number' || isNaN(parsedAmount)) {
+			throw new ValidationError('Invalid money value.')
 		}
 
 		// Converte para centavos e arredonda para inteiro
 		const amountInCents = Math.round(parsedAmount * 100)
 
-		super(amountInCents)
+		super({ amountInCents })
 		this.validate()
 	}
 
 	private validate() {
-		if (this.value < 0) {
-			throw new ValidationError('A renda mensal não pode ser negativa.')
+		if (this.amount < 0) {
+			throw new ValidationError('Value cannot be negative.')
 		}
 	}
 
 	/** Retorna o valor em reais */
-	public get value(): number {
-		return super.value / 100
+	public get amount(): number {
+		return this.props.amountInCents / 100
 	}
 
 	/** Retorna o valor formatado em moeda brasileira */
 	public get formatted(): string {
-		return this.value.toLocaleString('pt-BR', {
+		return this.amount.toLocaleString('pt-BR', {
 			style: 'currency',
 			currency: 'BRL',
 		})
@@ -41,27 +42,30 @@ export class Money extends ValueObject<number> {
 
 	/** Soma outra renda */
 	public add(other: Money): Money {
-		return new Money((this.value + other.value).toFixed(2))
+		const sum = this.amount + other.amount
+		if (isNaN(sum)) throw new ValidationError('Invalid money operation')
+		return new Money(sum)
 	}
 
 	/** Subtrai outra renda, garantindo que não fique negativa */
 	public subtract(other: Money): Money {
-		const result = this.value - other.value
+		const result = this.amount - other.amount
+		if (isNaN(result)) throw new ValidationError('Invalid money operation')
 		if (result < 0) {
 			throw new ValidationError(
-				'O resultado da operação não pode ser negativo.',
+				'The result of the operation cannot be negative.',
 			)
 		}
-		return new Money(result.toFixed(2))
+		return new Money(result)
 	}
 
 	/** Compara dois Value Objects */
 	public equals(other: Money): boolean {
-		return Math.round(this.value * 100) === Math.round(other.value * 100)
+		return Math.round(this.amount * 100) === Math.round(other.amount * 100)
 	}
 
 	/** Converte para string simples */
 	public toString(): string {
-		return this.value.toFixed(2)
+		return this.amount.toFixed(2)
 	}
 }
