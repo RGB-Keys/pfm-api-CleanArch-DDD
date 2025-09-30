@@ -9,7 +9,9 @@ export class DomainEvents {
 	private static markedAggregates: AggregateRoot[] = []
 
 	public static markAggregateForDispatch(aggregate: AggregateRoot) {
-		const aggregateFound = !!this.findMarkedAggreateById(aggregate.id)
+		const aggregateFound = !!this.findMarkedAggreateById(
+			aggregate.id as UniqueEntityId,
+		)
 
 		if (!aggregateFound) {
 			this.markedAggregates.push(aggregate)

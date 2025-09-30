@@ -9,14 +9,14 @@ export class UniqueEntityId implements EntityId {
 	}
 
 	toString() {
-		return this.value
+		return this.value.toString()
 	}
 
 	toValue() {
 		return this.value
 	}
 
-	equals(id: UniqueEntityId) {
+	equals(id: EntityId) {
 		return id.toValue() === this.value
 	}
 }
