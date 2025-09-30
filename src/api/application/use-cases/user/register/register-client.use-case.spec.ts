@@ -1,7 +1,7 @@
 import { ClientAlreadyExistsError } from '@/api/core/errors/domain/client/client-already-exists-error'
 import { Client } from '@/api/domain/entities/client.entity'
-import { UserRole } from '@/api/domain/entities/enums/user/role'
-import { InMemoryClientRepository } from '@/tests/in-memory/in-memory-client.repository'
+import { UserRole } from '@/api/domain/enums/user/role'
+import { InMemoryClientRepository } from '@/shared/tests/in-memory/in-memory-client.repository'
 import { RegisterClientUseCase } from './register-client.use-case'
 
 describe('Register Client Use Case', () => {

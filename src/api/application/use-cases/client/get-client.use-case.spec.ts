@@ -1,6 +1,6 @@
 import { ClientNotFoundError } from '@/api/core/errors/domain/client/client-not-found-error'
 import { Client } from '@/api/domain/entities/client.entity'
-import { InMemoryClientRepository } from '@/tests/in-memory/in-memory-client.repository'
+import { InMemoryClientRepository } from '@/shared/tests/in-memory/in-memory-client.repository'
 import { GetClientUseCase } from './get-client.use-case'
 
 describe('Get Client Use Case', async () => {

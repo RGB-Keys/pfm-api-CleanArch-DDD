@@ -3,7 +3,7 @@ import { UniqueEntityId } from '@/api/core/entities/value-objects/unique-entity-
 import { Optional } from '@/api/core/types/optional'
 import { validateProps } from '@/api/core/utils/validateProps.utils'
 import { validateString } from '@/api/core/utils/validateString.utils'
-import { UserRole } from './enums/user/role'
+import { UserRole } from '../enums/user/role'
 
 export interface UserProps {
 	email: User['email']
