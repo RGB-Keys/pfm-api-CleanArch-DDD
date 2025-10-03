@@ -5,7 +5,7 @@ import { Money } from '@/api/domain/entities/value-objects/money.value-object'
 import { Category } from '@/api/domain/entities/value-objects/category.value-object'
 import { ClientRepository } from '../../repositories/client.repository'
 import { ClientNotFoundError } from '@/api/core/errors/domain/client/client-not-found-error'
-import { DomainEvents } from '@/api/core/events/domain-events'
+import { EventBus } from '@/api/core/events/event-bus'
 
 interface CreateIncomeUseCaseRequest {
 	clientId: string
@@ -23,7 +23,10 @@ type CreateIncomeUseCaseResponse = Either<
 >
 
 export class CreateIncomeUseCase {
-	constructor(private clientRepository: ClientRepository) {}
+	constructor(
+		private readonly clientRepository: ClientRepository,
+		private readonly eventBus: EventBus,
+	) {}
 
 	async execute({
 		clientId,
@@ -45,7 +48,7 @@ export class CreateIncomeUseCase {
 		})
 
 		client.addIncome(income)
-		DomainEvents.dispatchEventsForAggregate(client.id as UniqueEntityId)
+		this.eventBus.dispatchEventsForAggregate(client.id as UniqueEntityId)
 		await this.clientRepository.save(client)
 
 		return success({ income })

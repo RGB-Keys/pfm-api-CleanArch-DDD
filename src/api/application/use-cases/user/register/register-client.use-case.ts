@@ -20,8 +20,8 @@ type RegisterClientUseCaseResponse = Either<
 
 export class RegisterClientUseCase {
 	constructor(
-		private clientRepository: ClientRepository,
-		private hashGenerator: HashGenerator,
+		private readonly clientRepository: ClientRepository,
+		private readonly hashGenerator: HashGenerator,
 	) {}
 
 	async execute({

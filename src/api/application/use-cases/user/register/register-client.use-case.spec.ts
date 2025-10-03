@@ -1,22 +1,30 @@
+import { ClientRepository } from '@/api/application/repositories/client.repository'
 import { ClientAlreadyExistsError } from '@/api/core/errors/domain/client/client-already-exists-error'
 import { Client } from '@/api/domain/entities/client.entity'
 import { UserRole } from '@/api/domain/enums/user/role'
-import { InMemoryClientRepository } from '@/shared/tests/in-memory/in-memory-client.repository'
 import { RegisterClientUseCase } from './register-client.use-case'
 
 describe('Register Client Use Case', () => {
-	let clientRepository: InMemoryClientRepository
+	let clientRepository: ClientRepository
 	let hashGenerator: { hash: ReturnType<typeof vi.fn> }
 	let sut: RegisterClientUseCase
 
 	beforeEach(() => {
-		clientRepository = new InMemoryClientRepository()
+		clientRepository = {
+			create: vi.fn(),
+			findUnique: vi.fn(),
+		} as unknown as ClientRepository
+
 		hashGenerator = { hash: vi.fn() }
 		sut = new RegisterClientUseCase(clientRepository, hashGenerator)
 	})
 
 	it('should be able register a new client', async () => {
 		hashGenerator.hash.mockResolvedValue('hashed_password')
+
+		const findClient = vi
+			.spyOn(clientRepository, 'findUnique')
+			.mockResolvedValueOnce(null)
 
 		const request = {
 			name: 'John Doe',
@@ -25,7 +33,13 @@ describe('Register Client Use Case', () => {
 			phoneNumber: '88888888888',
 		}
 
+		vi.spyOn(clientRepository, 'create').mockResolvedValue()
+
 		const result = await sut.execute(request)
+
+		expect(findClient).toHaveBeenCalledWith({
+			email: request.email,
+		})
 
 		expect(result.isSuccess()).toBe(true)
 		if (result.isSuccess()) {
@@ -50,6 +64,10 @@ describe('Register Client Use Case', () => {
 			phoneNumber: '88888888888',
 		})
 		clientRepository.create(existingClient)
+
+		vi.spyOn(clientRepository, 'findUnique').mockResolvedValueOnce(
+			existingClient,
+		)
 
 		const request = {
 			name: 'John Doe 2',
