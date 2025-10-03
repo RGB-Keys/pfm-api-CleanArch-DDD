@@ -1,49 +1,101 @@
-import { IncomeNotFoundError } from '@/api/core/errors/domain/income/income-not-found-error'
-import { Income } from '@/api/domain/entities/income.entity'
-import { InMemoryIncomeRepository } from '@/shared/tests/in-memory/in-memory-income.repository'
-import { GetIncomeUseCase } from './get-income.use-case'
-import { Client } from '@/api/domain/entities/client.entity'
-import { InMemoryClientRepository } from '@/shared/tests/in-memory/in-memory-client.repository'
 import { UniqueEntityId } from '@/api/core/entities/value-objects/unique-entity-id'
-import { Money } from '@/api/domain/entities/value-objects/money.value-object'
+import { ClientNotFoundError } from '@/api/core/errors/domain/client/client-not-found-error'
+import { IncomeNotFoundError } from '@/api/core/errors/domain/income/income-not-found-error'
+import { NotAllowedError } from '@/api/core/errors/domain/not-allowed-error'
+import { EventBus } from '@/api/core/events/event-bus'
+import { Client } from '@/api/domain/entities/client.entity'
+import { Income } from '@/api/domain/entities/income.entity'
 import { Category } from '@/api/domain/entities/value-objects/category.value-object'
-import { PersistIncomeOnAddedHandler } from '../../subscribers/income/persist-income-on-added.handler'
-import { DomainEvents } from '@/api/core/events/domain-events'
+import { Money } from '@/api/domain/entities/value-objects/money.value-object'
+import { ClientRepository } from '../../repositories/client.repository'
+import { IncomeRepository } from '../../repositories/income.repository'
+import { GetIncomeUseCase } from './get-income.use-case'
 
 describe('Get Income Use Case', async () => {
-	let clientRepository: InMemoryClientRepository
-	let incomeRepository: InMemoryIncomeRepository
-	let handler: PersistIncomeOnAddedHandler
+	let clientRepository: ClientRepository
+	let incomeRepository: IncomeRepository
+	let eventBus: EventBus
 	let sut: GetIncomeUseCase
 
 	beforeEach(() => {
-		clientRepository = new InMemoryClientRepository()
-		incomeRepository = new InMemoryIncomeRepository()
-		handler = new PersistIncomeOnAddedHandler(incomeRepository)
-		sut = new GetIncomeUseCase(incomeRepository)
+		clientRepository = {
+			create: vi.fn(),
+			findUnique: vi.fn(),
+			save: vi.fn(),
+		} as unknown as ClientRepository
 
-		handler.setupSubscriptions()
+		incomeRepository = {
+			findUnique: vi.fn(),
+		} as unknown as IncomeRepository
+
+		eventBus = {
+			markAggregateForDispatch: vi.fn(),
+			dispatchEventsForAggregate: vi.fn(),
+		}
+
+		sut = new GetIncomeUseCase(clientRepository, incomeRepository)
 	})
 
 	it('should be able to get a income', async () => {
-		const existingIncome = await mockIncome()
+		const { client, income } = await mockIncome()
+
+		vi.spyOn(clientRepository, 'findUnique').mockResolvedValueOnce(client)
+		vi.spyOn(incomeRepository, 'findUnique').mockResolvedValueOnce(income)
 
 		const result = await sut.execute({
-			incomeId: existingIncome.id.toString(),
+			incomeId: income.id.toString(),
+			clientId: client.id.toString(),
 		})
 
 		expect(result.isSuccess()).toBe(true)
 		if (result.isSuccess()) {
-			const { income } = result.value
-			expect(income).toEqual(existingIncome)
+			expect(result.value.income).toEqual(income)
 		}
 	})
 
-	it('should not be able to get a income if doesnt exist', async () => {
-		const result = await sut.execute({ incomeId: 'wrond-id' })
+	it('should not be able to get a income if client doesnt exist', async () => {
+		const { income } = await mockIncome()
+
+		vi.spyOn(clientRepository, 'findUnique').mockResolvedValueOnce(null)
+		vi.spyOn(incomeRepository, 'findUnique').mockResolvedValueOnce(income)
+
+		const result = await sut.execute({
+			clientId: 'wrong-id',
+			incomeId: income.id.toString(),
+		})
+
+		expect(result.isFail()).toBe(true)
+		expect(result.value).toBeInstanceOf(ClientNotFoundError)
+	})
+
+	it('should not be able to get a income if income doesnt exist', async () => {
+		const { client } = await mockIncome()
+
+		vi.spyOn(clientRepository, 'findUnique').mockResolvedValueOnce(client)
+		vi.spyOn(incomeRepository, 'findUnique').mockResolvedValueOnce(null)
+
+		const result = await sut.execute({
+			clientId: client.id.toString(),
+			incomeId: 'wrong-id',
+		})
 
 		expect(result.isFail()).toBe(true)
 		expect(result.value).toBeInstanceOf(IncomeNotFoundError)
+	})
+
+	it('should return NotAllowedError if client is not the income owner', async () => {
+		const { otherClient, income } = await mockIncome()
+
+		vi.spyOn(clientRepository, 'findUnique').mockResolvedValueOnce(otherClient)
+		vi.spyOn(incomeRepository, 'findUnique').mockResolvedValueOnce(income)
+
+		const result = await sut.execute({
+			clientId: otherClient.id.toString(),
+			incomeId: income.id.toString(),
+		})
+
+		expect(result.isFail()).toBe(true)
+		expect(result.value).toBeInstanceOf(NotAllowedError)
 	})
 
 	const mockIncome = async () => {
@@ -51,9 +103,17 @@ describe('Get Income Use Case', async () => {
 			email: 'teste@gmail.com',
 			name: 'testualdo',
 			passwordHash: 'some_password',
+			monthlyIncome: new Money(5000),
+		})
+
+		const otherClient = Client.create({
+			email: 'teste01@gmail.com',
+			name: 'testualdo01',
+			passwordHash: 'some_password',
 		})
 
 		await clientRepository.create(client)
+		await clientRepository.create(otherClient)
 
 		const income = Income.create({
 			clientId: new UniqueEntityId(client.id.toString()),
@@ -64,9 +124,9 @@ describe('Get Income Use Case', async () => {
 		})
 
 		client.addIncome(income)
-		DomainEvents.dispatchEventsForAggregate(client.id as UniqueEntityId)
-		await clientRepository.save(client)
 
-		return income
+		eventBus.dispatchEventsForAggregate(client.id as UniqueEntityId)
+		await clientRepository.save(client)
+		return { client, otherClient, income }
 	}
 })

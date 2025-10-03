@@ -22,7 +22,7 @@ type UpdateClientUseCaseResponse = Either<
 >
 
 export class UpdateClientUseCase {
-	constructor(private clientRepository: ClientRepository) {}
+	constructor(private readonly clientRepository: ClientRepository) {}
 
 	async execute({
 		clientId,

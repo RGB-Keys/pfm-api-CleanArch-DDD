@@ -1,19 +1,26 @@
 import { UniqueEntityId } from '@/api/core/entities/value-objects/unique-entity-id'
+import { ValidationError } from '@/api/core/errors/domain/validation-error.domain-error'
 import { Optional } from '@/api/core/types/optional'
 import { validateProps } from '@/api/core/utils/validateProps.utils'
 import { validateString } from '@/api/core/utils/validateString.utils'
 import { UserRole } from '../enums/user/role'
-import { User, UserProps } from './user.entity'
-import { Income } from './income.entity'
+import { BalanceUpdatedEvent } from '../events/client/balanceUpdated.event'
+import { ExpenseAddedEvent } from '../events/expense/expense-added.event'
+import { ExpenseRemovedEvent } from '../events/expense/expense-removed.event'
+import { GoalAddedEvent } from '../events/goal/goal-added.event'
+import { GoalContributedEvent } from '../events/goal/goal-contribute.event'
+import { GoalReachedEvent } from '../events/goal/goal-reached.event'
+import { GoalRemovedEvent } from '../events/goal/goal-removed.event'
+import { IncomeAddedEvent } from '../events/income/income-added.event'
+import { IncomeRemovedEvent } from '../events/income/income-removed.event'
 import { Expense } from './expense.entity'
 import { Goal } from './goal.entity'
-import { ExpenseAddedEvent } from '../events/expense/expense-added.event'
-import { IncomeAddedEvent } from '../events/income/income-added.event'
-import { GoalContributedEvent } from '../events/goal/goal-contribute.event'
+import { Income } from './income.entity'
+import { User, UserProps } from './user.entity'
 import { Money } from './value-objects/money.value-object'
-import { BalanceUpdatedEvent } from '../events/client/balanceUpdated.event'
-import { ValidationError } from '@/api/core/errors/domain/validation-error.domain-error'
-import { GoalAddedEvent } from '../events/goal/goal-added.event'
+import { ExpenseList } from './watched-lists/expense.watched-list'
+import { GoalList } from './watched-lists/goal.watched-list'
+import { IncomeList } from './watched-lists/income.watched-list'
 
 export interface ClientProps extends UserProps {
 	name: Client['name']
@@ -28,24 +35,32 @@ export class Client extends User {
 	public name: string
 	public phoneNumber?: string | null
 	public monthlyIncome?: Money | null
-	public incomes: Income[]
-	public expenses: Expense[]
-	public goals: Goal[]
+	public incomes: IncomeList
+	public expenses: ExpenseList
+	public goals: GoalList
 
-	private constructor(input: ClientProps, id?: UniqueEntityId) {
+	private constructor(
+		input: Omit<
+			ClientProps,
+			'monthlyIncome' | 'incomes' | 'expenses' | 'goals'
+		>,
+		id?: UniqueEntityId,
+	) {
 		super(
 			{
 				email: input.email,
 				passwordHash: input.passwordHash,
+				role: UserRole.CLIENT,
+				updatedAt: input.updatedAt,
 			},
 			id,
 		)
 		this.name = input.name
 		this.phoneNumber = input.phoneNumber ?? null
-		this.monthlyIncome = input.monthlyIncome ?? new Money(0)
-		this.incomes = input.incomes ?? []
-		this.expenses = input.expenses ?? []
-		this.goals = input.goals ?? []
+		this.monthlyIncome = new Money(0)
+		this.incomes = new IncomeList([])
+		this.expenses = new ExpenseList([])
+		this.goals = new GoalList([])
 
 		this.validate()
 	}
@@ -71,7 +86,7 @@ export class Client extends User {
 
 		if (Object.keys(updates).length > 0) {
 			Object.assign(this, updates)
-			this.updatedAt = new Date()
+			this.touch()
 		}
 	}
 
@@ -81,13 +96,15 @@ export class Client extends User {
 		}
 
 		this.monthlyIncome = amount
-		this.updatedAt = new Date()
+		this.touch()
 	}
 
 	public addIncome(income: Income) {
 		if (!income.clientId.equals(this.id))
 			throw new ValidationError('income belongs to other client')
-		this.incomes.push(income)
+		this.incomes.add(income)
+
+		this.touch()
 
 		this.addDomainEvent(
 			new IncomeAddedEvent(
@@ -97,6 +114,25 @@ export class Client extends User {
 				income.date,
 				income.category,
 				income.description,
+			),
+		)
+
+		this.addDomainEvent(
+			new BalanceUpdatedEvent(
+				new UniqueEntityId(this.id.toString()),
+				this.balance(),
+			),
+		)
+	}
+
+	public removeIncome(income: Income) {
+		this.incomes.remove(income)
+		this.touch()
+
+		this.addDomainEvent(
+			new IncomeRemovedEvent(
+				new UniqueEntityId(income.id.toString()),
+				new UniqueEntityId(this.id.toString()),
 			),
 		)
 
@@ -118,7 +154,8 @@ export class Client extends User {
 			throw new ValidationError('Expense exceeds available balance')
 		}
 
-		this.expenses.push(expense)
+		this.expenses.add(expense)
+		this.touch()
 
 		this.addDomainEvent(
 			new ExpenseAddedEvent(
@@ -139,10 +176,31 @@ export class Client extends User {
 		)
 	}
 
+	public removeExpense(expense: Expense) {
+		this.expenses.remove(expense)
+		this.touch()
+
+		this.addDomainEvent(
+			new ExpenseRemovedEvent(
+				new UniqueEntityId(expense.id.toString()),
+				new UniqueEntityId(this.id.toString()),
+			),
+		)
+
+		this.addDomainEvent(
+			new BalanceUpdatedEvent(
+				new UniqueEntityId(this.id.toString()),
+				this.balance(),
+			),
+		)
+	}
+
 	public addGoal(goal: Goal) {
 		if (!goal.clientId.equals(this.id))
 			throw new ValidationError('goal belongs to other client')
-		this.goals.push(goal)
+		this.goals.add(goal)
+
+		this.touch()
 
 		this.addDomainEvent(
 			new GoalAddedEvent(
@@ -150,7 +208,8 @@ export class Client extends User {
 				this.id as UniqueEntityId,
 				goal.saved,
 				goal.target,
-				goal.deadline,
+				goal.startedAt,
+				goal.endedAt,
 			),
 		)
 
@@ -163,17 +222,66 @@ export class Client extends User {
 		)
 	}
 
-	public balance(): Money {
+	public removeGoal(goal: Goal) {
+		this.goals.remove(goal)
+		this.touch()
+
+		this.addDomainEvent(
+			new GoalRemovedEvent(
+				new UniqueEntityId(goal.id.toString()),
+				new UniqueEntityId(this.id.toString()),
+			),
+		)
+
+		this.addDomainEvent(
+			new BalanceUpdatedEvent(
+				new UniqueEntityId(this.id.toString()),
+				this.balance(),
+			),
+		)
+	}
+
+	public contribute(goal: Goal, amount: Money): void {
+		const updated = goal.saved.add(amount)
+
+		if (updated.value > goal.target.value) {
+			throw new ValidationError('Contribution exceeds target amount.')
+		}
+
+		goal.saved = updated
+		goal.updatedAt = new Date()
+		this.touch()
+
+		this.addDomainEvent(
+			new GoalContributedEvent(
+				goal.id as UniqueEntityId,
+				this.id as UniqueEntityId,
+				goal.saved,
+			),
+		)
+
+		if (goal.saved.equals(goal.target)) {
+			this.addDomainEvent(
+				new GoalReachedEvent(
+					goal.id as UniqueEntityId,
+					this.id as UniqueEntityId,
+					goal.target,
+				),
+			)
+		}
+	}
+
+	private balance(): Money {
 		const safeAmount = (amount?: Money | null) => {
 			if (!amount) return new Money(0)
 			return amount
 		}
 
-		const totalIncomes = this.incomes.reduce(
+		const totalIncomes = this.incomes.items.reduce(
 			(sum, i) => sum.add(safeAmount(i.amount)),
 			new Money(0),
 		)
-		const totalExpenses = this.expenses.reduce(
+		const totalExpenses = this.expenses.items.reduce(
 			(sum, e) => sum.add(safeAmount(e.amount)),
 			new Money(0),
 		)
@@ -183,16 +291,16 @@ export class Client extends User {
 		return baseIncome.add(totalIncomes).subtract(totalExpenses)
 	}
 
+	private touch() {
+		this.updatedAt = new Date()
+	}
+
 	static create(args: ClientCreateArgs, id?: UniqueEntityId) {
 		return new Client(
 			{
 				...args,
-				monthlyIncome: args.monthlyIncome ?? new Money(0),
 				role: UserRole.CLIENT,
 				createdAt: new Date(),
-				incomes: [],
-				expenses: [],
-				goals: [],
 			},
 			id,
 		)

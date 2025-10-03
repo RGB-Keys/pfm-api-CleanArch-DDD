@@ -4,12 +4,12 @@ import { UniqueEntityId } from '@/api/core/entities/value-objects/unique-entity-
 import { Money } from '@/api/domain/entities/value-objects/money.value-object'
 import { ClientNotFoundError } from '@/api/core/errors/domain/client/client-not-found-error'
 import { ClientRepository } from '../../repositories/client.repository'
-import { DomainEvents } from '@/api/core/events/domain-events'
+import { EventBus } from '@/api/core/events/event-bus'
 
 interface CreateGoalUseCaseRequest {
 	clientId: string
 	target: number
-	deadline?: Date | null
+	endedAt?: Date | null
 	saved: number
 }
 
@@ -21,13 +21,16 @@ type CreateGoalUseCaseResponse = Either<
 >
 
 export class CreateGoalUseCase {
-	constructor(private clientRepository: ClientRepository) {}
+	constructor(
+		private readonly clientRepository: ClientRepository,
+		private readonly eventBus: EventBus,
+	) {}
 
 	async execute({
 		clientId,
 		saved,
 		target,
-		deadline,
+		endedAt,
 	}: CreateGoalUseCaseRequest): Promise<CreateGoalUseCaseResponse> {
 		const client = await this.clientRepository.findUnique({ clientId })
 
@@ -37,11 +40,11 @@ export class CreateGoalUseCase {
 			clientId: new UniqueEntityId(clientId),
 			saved: new Money(saved),
 			target: new Money(target),
-			deadline,
+			endedAt,
 		})
 
 		client.addGoal(goal)
-		DomainEvents.dispatchEventsForAggregate(client.id as UniqueEntityId)
+		this.eventBus.dispatchEventsForAggregate(client.id as UniqueEntityId)
 		await this.clientRepository.save(client)
 
 		return success({ goal })

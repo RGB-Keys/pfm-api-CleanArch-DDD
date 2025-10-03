@@ -1,22 +1,33 @@
 import { ClientNotFoundError } from '@/api/core/errors/domain/client/client-not-found-error'
 import { Client } from '@/api/domain/entities/client.entity'
-import { InMemoryClientRepository } from '@/shared/tests/in-memory/in-memory-client.repository'
+import { ClientRepository } from '../../repositories/client.repository'
 import { GetClientUseCase } from './get-client.use-case'
 
 describe('Get Client Use Case', async () => {
-	let clientRepository: InMemoryClientRepository
+	let clientRepository: ClientRepository
 	let sut: GetClientUseCase
 
 	beforeEach(() => {
-		clientRepository = new InMemoryClientRepository()
+		clientRepository = {
+			create: vi.fn(),
+			findUnique: vi.fn(),
+		} as unknown as ClientRepository
+
 		sut = new GetClientUseCase(clientRepository)
 	})
 
 	it('should be able to get a client', async () => {
 		const existingClient = await mockClient()
 
+		const findClient = vi
+			.spyOn(clientRepository, 'findUnique')
+			.mockResolvedValueOnce(existingClient)
+
 		const result = await sut.execute({ clientId: existingClient.id.toString() })
 
+		expect(findClient).toHaveBeenCalledWith({
+			clientId: existingClient.id.toString(),
+		})
 		expect(result.isSuccess()).toBe(true)
 		if (result.isSuccess()) {
 			const { client } = result.value
@@ -25,6 +36,8 @@ describe('Get Client Use Case', async () => {
 	})
 
 	it('should not be able to get a client if doesnt exist', async () => {
+		vi.spyOn(clientRepository, 'findUnique').mockResolvedValueOnce(null)
+
 		const result = await sut.execute({ clientId: 'wrong-id' })
 
 		expect(result.isFail()).toBe(true)
