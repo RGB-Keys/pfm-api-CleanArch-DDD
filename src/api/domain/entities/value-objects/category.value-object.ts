@@ -9,4 +9,12 @@ export class Category extends ValueObject<{ category: string }> {
 
 		super({ category: name })
 	}
+
+	public get name(): string {
+		return this.props.category
+	}
+
+	public toString(): string {
+		return this.props.category
+	}
 }
