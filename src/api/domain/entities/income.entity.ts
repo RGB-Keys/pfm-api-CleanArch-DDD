@@ -22,10 +22,7 @@ export class Income extends Entity {
 	public category?: Category | null
 	public updatedAt?: Date | null
 
-	private constructor(
-		props: Optional<IncomeProps, 'date'>,
-		id?: UniqueEntityId,
-	) {
+	private constructor(props: IncomeProps, id?: UniqueEntityId) {
 		super(id)
 
 		this.clientId = props.clientId
