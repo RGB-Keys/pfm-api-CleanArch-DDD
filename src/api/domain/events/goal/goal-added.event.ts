@@ -11,7 +11,8 @@ export class GoalAddedEvent extends DomainEvent {
 		public readonly clientId: UniqueEntityId,
 		public readonly saved: Money,
 		public readonly target: Money,
-		public readonly deadline?: Date | null,
+		public readonly startedAt: Date,
+		public readonly endedAt?: Date | null,
 	) {
 		super()
 		this.occurredAt = new Date()
