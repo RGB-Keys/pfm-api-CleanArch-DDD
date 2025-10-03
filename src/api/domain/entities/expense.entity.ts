@@ -29,7 +29,7 @@ export class Expense extends Entity {
 		this.amount = props.amount
 		this.date = props.date ?? new Date()
 		this.description = props.description
-		this.category = props.category
+		this.category = props.category ?? null
 		this.updatedAt = props.updatedAt
 
 		this.validate()
@@ -71,4 +71,4 @@ export class Expense extends Entity {
 	}
 }
 
-type ExpenseCreateArgs = Optional<ExpenseProps, 'date'>
+type ExpenseCreateArgs = Optional<ExpenseProps, 'date' | 'category'>
